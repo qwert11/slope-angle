@@ -3,7 +3,7 @@
 Browser-based tool for measuring line angles on charts, screenshots, and images with real-time visual feedback.
 
 ## Demo
-![demo](demo.png)
+![demo](demo2.png)
 
 ## Live Demo
 https://qwert11.github.io/slope-angle/
