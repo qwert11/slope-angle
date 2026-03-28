@@ -1,0 +1,947 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Angle Snap</title>
+  <style>
+    :root {
+      --bg: #14181f;
+      --panel: #1b2230;
+      --panel-2: #212a3a;
+      --text: #eef3ff;
+      --muted: #9faecc;
+      --accent: #59c173;
+      --accent-2: #e12a2a;
+      --line: rgba(255,255,255,0.08);
+      --drop: rgba(89, 193, 115, 0.18);
+      --shadow: 0 10px 35px rgba(0,0,0,0.28);
+      --radius: 16px;
+      --toolbarH: 140px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: radial-gradient(circle at top, #202633 0, #151922 35%, #10141b 100%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+    .app {
+      display: grid;
+      grid-template-rows: var(--toolbarH) 1fr;
+      height: 100vh;
+    }
+    .toolbar {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+      backdrop-filter: blur(8px);
+      box-shadow: var(--shadow);
+      z-index: 3;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .btn, .pill, .toggle {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: linear-gradient(180deg, var(--panel-2), var(--panel));
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+      transition: transform .14s ease, border-color .14s ease, background .14s ease, box-shadow .14s ease;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    .btn:hover, .pill:hover, .toggle:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.22); }
+    .btn:active, .pill:active, .toggle:active { transform: translateY(0); }
+    .btn.primary {
+      background: linear-gradient(180deg, #2b9f55, #247c43);
+      border-color: rgba(89,193,115,0.45);
+    }
+    .btn.warn {
+      background: linear-gradient(180deg, #8c2a2a, #6f2121);
+      border-color: rgba(225,42,42,0.45);
+    }
+    .pill {
+      color: var(--muted);
+      cursor: default;
+      background: rgba(255,255,255,0.03);
+    }
+    .toggle {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding-right: 12px;
+      cursor: pointer;
+    }
+    .toggle input { accent-color: var(--accent); }
+    .toolbar .spacer { flex: 1 1 auto; }
+    .status {
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      min-width: 280px;
+      font-size: 14px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .status strong { color: #fff; }
+    .angleBox {
+      padding: 11px 16px;
+      min-width: 230px;
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(225,42,42,0.17), rgba(225,42,42,0.08));
+      border: 1px solid rgba(225,42,42,0.35);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: .01em;
+      text-align: center;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+    .rotatePad {
+      flex: 1 1 240px;
+      min-width: 240px;
+      height: 42px;
+      border-radius: 999px;
+      border: 1px dashed rgba(255,255,255,0.2);
+      background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      cursor: ew-resize;
+      user-select: none;
+      position: relative;
+      overflow: hidden;
+    }
+    .rotatePad::before {
+      content: "";
+      position: absolute;
+      inset: 7px;
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0), rgba(255,255,255,0.04));
+      pointer-events: none;
+    }
+    .rotatePad.active {
+      border-color: rgba(89,193,115,0.55);
+      box-shadow: 0 0 0 2px rgba(89,193,115,0.12) inset;
+      color: #fff;
+    }
+    .stageWrap {
+      position: relative;
+      overflow: hidden;
+    }
+    #stage {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+    .dropOverlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      background:
+        radial-gradient(circle at center, rgba(89,193,115,0.18), rgba(89,193,115,0.08) 35%, rgba(0,0,0,0.35)),
+        repeating-linear-gradient(45deg, rgba(89,193,115,0.14), rgba(89,193,115,0.14) 12px, rgba(89,193,115,0.08) 12px, rgba(89,193,115,0.08) 24px);
+      border: 3px dashed rgba(89,193,115,0.45);
+      z-index: 4;
+      color: #f5fff7;
+      text-align: center;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      padding: 24px;
+    }
+    .dropOverlay small {
+      display: block;
+      margin-top: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.86);
+    }
+    .dropOverlay.visible { display: grid; }
+    #fileInput { display: none; }
+    .pasteDock {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+    }
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      opacity: 0.9;
+    }
+    .langSwitch {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+    }
+    .langBtn {
+      min-width: 48px;
+      border: 0;
+      border-radius: 9px;
+      padding: 8px 10px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .langBtn.active {
+      color: #fff;
+      background: linear-gradient(180deg, var(--panel-2), var(--panel));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+    .rangeWrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+      min-width: 220px;
+    }
+    .rangeWrap input[type="range"] {
+      width: 120px;
+      accent-color: var(--accent);
+    }
+    .rangeWrap .value {
+      min-width: 48px;
+      text-align: right;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    @media (max-width: 900px) {
+      :root { --toolbarH: 180px; }
+      .status, .angleBox { min-width: unset; width: 100%; }
+      .toolbar .spacer { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="toolbar">
+      <div class="row">
+        <label class="btn primary" for="fileInput" id="openLabel">Open image</label>
+        <button class="pill" type="button" id="dropHint">Drag & Drop on full page</button>
+        <button class="btn" type="button" id="focusPasteBtn">Insert: focus paste area</button>
+        <button class="btn" type="button" id="pasteBtn">Paste from clipboard</button>
+        <button class="btn warn" type="button" id="clearBtn">Clear line</button>
+        <div class="langSwitch" id="langSwitch"><button class="langBtn active" type="button" id="langEn">EN</button><button class="langBtn" type="button" id="langUk">UA</button></div><div class="spacer"></div>
+        <div class="angleBox" id="angleBox">Angle: <span id="angleValue">4.0°</span></div>
+      </div>
+      <div class="row">
+        <label class="toggle" id="originalSizeLabel"><input type="checkbox" id="originalSize"> Original size</label>
+        <label class="toggle" id="fitScreenLabel"><input type="checkbox" id="fitScreen" checked> Fit to 3/4 of screen</label>
+        <button class="btn" type="button" id="rotL90">⟲ 90°</button>
+        <button class="btn" type="button" id="rotR90">90° ⟳</button>
+        <button class="btn" type="button" id="rotL1">−1°</button>
+        <button class="btn" type="button" id="rotR1">+1°</button>
+        <button class="btn" type="button" id="rotReset">Reset rotation</button>
+        <div class="rangeWrap"><span id="opacityLabel">Opacity</span><input type="range" id="opacityRange" min="20" max="100" step="5" value="80"><span class="value" id="opacityValue">80%</span></div><div class="rotatePad" id="rotatePad">Hold and drag left / right for fine rotation</div>
+      </div>
+      <div class="row" style="margin-bottom:0;">
+        <div class="status" id="status"><strong>Demo loaded.</strong> Draw a line on the image, or load your own. Ctrl+V, drag & drop, and the clipboard button are ready.</div>
+        <div class="hint" id="hintText">Hint: hold the mouse button and draw on the image. On release, the line snaps to the first and last points.</div>
+      </div>
+      <input id="fileInput" type="file" accept="image/*">
+    </div>
+    <div class="stageWrap" id="stageWrap">
+      <canvas id="stage"></canvas>
+      <div class="dropOverlay" id="dropOverlay">Drop image here<small>PNG, JPG, WEBP, GIF, and anything your browser can read</small></div>
+      <div id="pasteDock" class="pasteDock" contenteditable="true"></div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const stage = document.getElementById('stage');
+      const ctx = stage.getContext('2d');
+      const stageWrap = document.getElementById('stageWrap');
+      const dropOverlay = document.getElementById('dropOverlay');
+      const fileInput = document.getElementById('fileInput');
+      const pasteDock = document.getElementById('pasteDock');
+      const focusPasteBtn = document.getElementById('focusPasteBtn');
+      const pasteBtn = document.getElementById('pasteBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const rotL90 = document.getElementById('rotL90');
+      const rotR90 = document.getElementById('rotR90');
+      const rotL1 = document.getElementById('rotL1');
+      const rotR1 = document.getElementById('rotR1');
+      const rotReset = document.getElementById('rotReset');
+      const rotatePad = document.getElementById('rotatePad');
+      const originalSize = document.getElementById('originalSize');
+      const fitScreen = document.getElementById('fitScreen');
+      const statusEl = document.getElementById('status');
+      const angleValue = document.getElementById('angleValue');
+      const dropHint = document.getElementById('dropHint');
+
+      const state = {
+        img: null,
+        imgName: 'demo.png',
+        rotation: 0,
+        originalSize: false,
+        fitMode: true,
+        line: null,
+        previewLine: null,
+        drawing: false,
+        demoMode: true,
+        demoStartedAt: performance.now(),
+        rotateDragging: false,
+        rotateStartX: 0,
+        rotateStartAngle: 0,
+        userOpacity: 0.8,
+        tempOpacity: null,
+        lang: localStorage.getItem('angleToolLang') || 'en',
+        dpr: Math.max(1, window.devicePixelRatio || 1)
+      };
+
+
+      const i18n = {
+        en: {
+          openImage: 'Open image',
+          dragDropFullPage: 'Drag & Drop on full page',
+          focusPasteArea: 'Insert: focus paste area',
+          pasteFromClipboard: 'Paste from clipboard',
+          clearLine: 'Clear line',
+          angle: 'Angle',
+          originalSize: 'Original size',
+          fitScreen: 'Fit to 3/4 of screen',
+          resetRotation: 'Reset rotation',
+          rotatePad: 'Hold and drag left / right for fine rotation',
+          opacity: 'Opacity',
+          hint: 'Hint: hold the mouse button and draw on the image. On release, the line snaps to the first and last points.',
+          dropTitle: 'Drop image here',
+          dropSub: 'PNG, JPG, WEBP, GIF, and anything your browser can read',
+          statusDemo: '<strong>Demo loaded.</strong> Draw a line on the image, or load your own. Ctrl+V, drag & drop, and the clipboard button are ready.',
+          statusDemoLoaded(name) { return `<strong>Demo loaded.</strong> ${name} Demo animation loops until you start drawing.`; },
+          statusImageLoaded(name) { return `<strong>Image loaded.</strong> ${name} Your new image replaced the demo. Draw on top of it.`; },
+          statusClipboardUnavailable: '<strong>Clipboard unavailable.</strong> Use Ctrl+V or drag & drop.',
+          statusClipboardNoImage: '<strong>No image found in clipboard.</strong> Copy an image and try again.',
+          statusClipboardFailed: '<strong>Could not read clipboard.</strong> The browser may ask for permission. Try Ctrl+V directly on the page.',
+          statusPasteFocus: '<strong>Paste area is active.</strong> Press Ctrl+V. If the clipboard contains an image, it will load.',
+          statusCleared(name) { return `<strong>Line cleared.</strong> Image ${name ? 'stays in place: ' + name : 'is preserved'}.`; },
+          statusDropEnabled: '<strong>Drag & Drop is enabled.</strong> Drop an image anywhere on the page.'
+        },
+        uk: {
+          openImage: 'Відкрити зображення',
+          dragDropFullPage: 'Drag & Drop на всю сторінку',
+          focusPasteArea: 'Insert: фокус у paste-area',
+          pasteFromClipboard: 'Вставити з буфера',
+          clearLine: 'Очистити лінію',
+          angle: 'Кут',
+          originalSize: 'Оригінальний розмір',
+          fitScreen: 'Вписати у 3/4 екрана',
+          resetRotation: 'Скинути поворот',
+          rotatePad: 'Затисни й веди мишу вліво / вправо для точного повороту',
+          opacity: 'Прозорість',
+          hint: 'Підказка: затисни кнопку миші й малюй по зображенню. Після відпускання лінія вирівнюється за першою і останньою точками.',
+          dropTitle: 'Відпускай зображення сюди',
+          dropSub: 'PNG, JPG, WEBP, GIF і все, що браузер уміє читати',
+          statusDemo: '<strong>Демо завантажено.</strong> Намалюй лінію поверх зображення або завантаж своє. Ctrl+V, drag & drop і кнопка буфера вже працюють.',
+          statusDemoLoaded(name) { return `<strong>Демо завантажено.</strong> ${name} Анімація крутиться по колу, доки ти не почнеш малювати.`; },
+          statusImageLoaded(name) { return `<strong>Зображення завантажено.</strong> ${name} Нове зображення замінило демо. Малюй поверх нього.`; },
+          statusClipboardUnavailable: '<strong>Буфер недоступний.</strong> Використай Ctrl+V або drag & drop.',
+          statusClipboardNoImage: '<strong>У буфері не знайдено зображення.</strong> Скопіюй картинку та спробуй ще раз.',
+          statusClipboardFailed: '<strong>Не вдалося прочитати буфер.</strong> Браузер міг попросити доступ. Спробуй Ctrl+V прямо на сторінці.',
+          statusPasteFocus: '<strong>Paste-area активна.</strong> Тисни Ctrl+V. Якщо в буфері є зображення, воно завантажиться.',
+          statusCleared(name) { return `<strong>Лінію очищено.</strong> Зображення ${name ? 'залишилось на місці: ' + name : 'збережене'}.`; },
+          statusDropEnabled: '<strong>Drag & Drop увімкнено.</strong> Перетягни зображення на будь-яку частину сторінки.'
+        }
+      };
+
+      function t(key, ...args) {
+        const dict = i18n[state.lang] || i18n.en;
+        const val = dict[key];
+        return typeof val === 'function' ? val(...args) : val;
+      }
+
+      function applyLanguage() {
+        document.documentElement.lang = state.lang === 'uk' ? 'uk' : 'en';
+        openLabel.textContent = t('openImage');
+        dropHint.textContent = t('dragDropFullPage');
+        focusPasteBtn.textContent = t('focusPasteArea');
+        pasteBtn.textContent = t('pasteFromClipboard');
+        clearBtn.textContent = t('clearLine');
+        angleBox.childNodes[0].textContent = t('angle') + ': ';
+        originalSizeLabel.lastChild.textContent = ' ' + t('originalSize');
+        fitScreenLabel.lastChild.textContent = ' ' + t('fitScreen');
+        rotReset.textContent = t('resetRotation');
+        rotatePad.textContent = t('rotatePad');
+        opacityLabel.textContent = t('opacity');
+        hintText.textContent = t('hint');
+        dropOverlay.childNodes[0].nodeValue = t('dropTitle');
+        dropOverlay.querySelector('small').textContent = t('dropSub');
+        langEn.classList.toggle('active', state.lang === 'en');
+        langUk.classList.toggle('active', state.lang === 'uk');
+      }
+
+      function setLanguage(lang) {
+        state.lang = lang === 'uk' ? 'uk' : 'en';
+        localStorage.setItem('angleToolLang', state.lang);
+        applyLanguage();
+      }
+
+      function getCurrentImageOpacity() {
+        return state.tempOpacity ?? state.userOpacity;
+      }
+
+      const demoStroke = [
+        {x: 80, y: 300},
+        {x: 160, y: 268},
+        {x: 240, y: 276},
+        {x: 330, y: 248},
+        {x: 430, y: 252},
+        {x: 535, y: 222},
+        {x: 635, y: 230},
+        {x: 755, y: 205},
+        {x: 890, y: 186},
+        {x: 1010, y: 172},
+        {x: 1145, y: 160},
+        {x: 1290, y: 126}
+      ];
+
+      function setStatus(html) {
+        statusEl.innerHTML = html;
+      }
+
+      function normalizeAngle(deg) {
+        let a = deg;
+        while (a <= -180) a += 360;
+        while (a > 180) a -= 360;
+        return a;
+      }
+
+      function angleFromScreenPoints(a, b) {
+        const radians = Math.atan2(a.y - b.y, b.x - a.x);
+        return normalizeAngle(radians * 180 / Math.PI);
+      }
+
+      function updateAngleBox() {
+        const line = state.previewLine || state.line;
+        if (!line) {
+          angleValue.textContent = '—';
+          return;
+        }
+        const p1 = localToScreen(line.start.x, line.start.y);
+        const p2 = localToScreen(line.end.x, line.end.y);
+        const angle = angleFromScreenPoints(p1, p2);
+        angleValue.textContent = angle.toFixed(1) + '°';
+      }
+
+      function resizeCanvas() {
+        const rect = stageWrap.getBoundingClientRect();
+        state.dpr = Math.max(1, window.devicePixelRatio || 1);
+        stage.width = Math.max(1, Math.floor(rect.width * state.dpr));
+        stage.height = Math.max(1, Math.floor(rect.height * state.dpr));
+        stage.style.width = rect.width + 'px';
+        stage.style.height = rect.height + 'px';
+        draw();
+      }
+
+      function getCanvasCssSize() {
+        return { width: stage.width / state.dpr, height: stage.height / state.dpr };
+      }
+
+      function getDisplayScale() {
+        if (!state.img) return 1;
+        if (state.originalSize && !state.fitMode) return 1;
+        if (!state.fitMode && !state.originalSize) return 1;
+        const { width, height } = getCanvasCssSize();
+        const maxW = width * 0.75;
+        const maxH = height * 0.75;
+        return Math.min(maxW / state.img.width, maxH / state.img.height);
+      }
+
+      function getImageCenter() {
+        const { width, height } = getCanvasCssSize();
+        return { x: width / 2, y: height / 2 };
+      }
+
+      function localToScreen(x, y) {
+        const img = state.img;
+        if (!img) return { x: 0, y: 0 };
+        const scale = getDisplayScale();
+        const center = getImageCenter();
+        const dx = (x - img.width / 2) * scale;
+        const dy = (y - img.height / 2) * scale;
+        const rad = state.rotation * Math.PI / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        return {
+          x: center.x + dx * cos - dy * sin,
+          y: center.y + dx * sin + dy * cos
+        };
+      }
+
+      function screenToLocal(x, y) {
+        const img = state.img;
+        if (!img) return null;
+        const scale = getDisplayScale();
+        const center = getImageCenter();
+        const dx = x - center.x;
+        const dy = y - center.y;
+        const rad = -state.rotation * Math.PI / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        const rx = dx * cos - dy * sin;
+        const ry = dx * sin + dy * cos;
+        return {
+          x: rx / scale + img.width / 2,
+          y: ry / scale + img.height / 2
+        };
+      }
+
+      function isPointOnImage(local) {
+        return local && state.img &&
+          local.x >= 0 && local.y >= 0 &&
+          local.x <= state.img.width && local.y <= state.img.height;
+      }
+
+      function clearMeasure() {
+        state.line = null;
+        state.previewLine = null;
+        state.drawing = false;
+        updateAngleBox();
+        draw();
+      }
+
+      function drawGrid() {
+        const { width, height } = getCanvasCssSize();
+        ctx.save();
+        ctx.scale(state.dpr, state.dpr);
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#0e131b';
+        ctx.fillRect(0, 0, width, height);
+
+        for (let step = 40, i = 0; i * step < width + height; i++) {}
+
+        const minor = 40;
+        const major = 200;
+        for (let x = 0; x <= width; x += minor) {
+          ctx.strokeStyle = x % major === 0 ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)';
+          ctx.lineWidth = x % major === 0 ? 1.4 : 1;
+          ctx.beginPath();
+          ctx.moveTo(x + 0.5, 0);
+          ctx.lineTo(x + 0.5, height);
+          ctx.stroke();
+        }
+        for (let y = 0; y <= height; y += minor) {
+          ctx.strokeStyle = y % major === 0 ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)';
+          ctx.lineWidth = y % major === 0 ? 1.4 : 1;
+          ctx.beginPath();
+          ctx.moveTo(0, y + 0.5);
+          ctx.lineTo(width, y + 0.5);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawImage() {
+        if (!state.img) return;
+        const img = state.img;
+        const scale = getDisplayScale();
+        const center = getImageCenter();
+
+        ctx.save();
+        ctx.scale(state.dpr, state.dpr);
+        ctx.translate(center.x, center.y);
+        ctx.rotate(state.rotation * Math.PI / 180);
+        ctx.scale(scale, scale);
+
+        const x = -img.width / 2;
+        const y = -img.height / 2;
+        ctx.shadowColor = 'rgba(0,0,0,0.35)';
+        ctx.shadowBlur = 28;
+        ctx.shadowOffsetY = 14;
+        ctx.globalAlpha = getCurrentImageOpacity();
+        ctx.drawImage(img, x, y, img.width, img.height);
+        ctx.globalAlpha = 1;
+        ctx.shadowColor = 'transparent';
+        ctx.lineWidth = 2 / scale;
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.strokeRect(x, y, img.width, img.height);
+        ctx.restore();
+      }
+
+      function drawHandles(start, end) {
+        ctx.beginPath();
+        ctx.fillStyle = '#e12a2a';
+        ctx.arc(start.x, start.y, 5.5, 0, Math.PI * 2);
+        ctx.arc(end.x, end.y, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.fillStyle = '#fff';
+        ctx.arc(start.x, start.y, 2, 0, Math.PI * 2);
+        ctx.arc(end.x, end.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function drawAngleHelper(start, end, angleDeg) {
+        const dx = end.x - start.x;
+        const baselineEnd = { x: end.x, y: start.y };
+        const lineAngle = Math.atan2(end.y - start.y, dx);
+        const baseAngle = dx >= 0 ? 0 : Math.PI;
+        const radius = Math.max(26, Math.min(58, Math.hypot(dx, end.y - start.y) * 0.12));
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(225,42,42,0.65)';
+        ctx.lineWidth = 1.25;
+        ctx.setLineDash([6, 5]);
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(baselineEnd.x, baselineEnd.y);
+        ctx.moveTo(end.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.beginPath();
+        const anticlockwise = dx >= 0 ? lineAngle < 0 : lineAngle > Math.PI;
+        ctx.arc(start.x, start.y, radius, baseAngle, lineAngle, anticlockwise);
+        ctx.strokeStyle = '#ff6b6b';
+        ctx.lineWidth = 2.6;
+        ctx.stroke();
+
+        const midAngle = baseAngle + (lineAngle - baseAngle) / 2;
+        const tx = start.x + Math.cos(midAngle) * (radius + 16);
+        const ty = start.y + Math.sin(midAngle) * (radius + 16);
+        ctx.fillStyle = '#111';
+        ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+        ctx.lineWidth = 3.5;
+        ctx.font = 'bold 16px Inter, system-ui, sans-serif';
+        const angleText = Math.abs(angleDeg).toFixed(1) + '°';
+        ctx.strokeText(angleText, tx - 12, ty - 8);
+        ctx.fillText(angleText, tx - 12, ty - 8);
+        ctx.restore();
+      }
+
+      function drawLineLocal(line, isPreview = false) {
+        if (!line || !state.img) return;
+        const a = localToScreen(line.start.x, line.start.y);
+        const b = localToScreen(line.end.x, line.end.y);
+        const angle = angleFromScreenPoints(a, b);
+
+        ctx.save();
+        ctx.scale(state.dpr, state.dpr);
+
+        ctx.strokeStyle = '#e12a2a';
+        ctx.lineWidth = isPreview ? 2.2 : 3.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+
+        drawAngleHelper(a, b, angle);
+        drawHandles(a, b);
+        ctx.restore();
+      }
+
+      function getDemoLine(now) {
+        const loop = 4300;
+        const t = (now - state.demoStartedAt) % loop;
+        const holdEnd = 3600;
+        const first = demoStroke[0];
+        const last = demoStroke[demoStroke.length - 1];
+
+        if (t < 2400) {
+          const progress = t / 2400;
+          const segments = demoStroke.length - 1;
+          const scaled = progress * segments;
+          const full = Math.floor(scaled);
+          const rem = scaled - full;
+          const pts = [demoStroke[0]];
+          for (let i = 1; i <= full && i < demoStroke.length; i++) pts.push(demoStroke[i]);
+          if (full < demoStroke.length - 1) {
+            const a = demoStroke[full];
+            const b = demoStroke[full + 1];
+            pts.push({ x: a.x + (b.x - a.x) * rem, y: a.y + (b.y - a.y) * rem });
+          }
+          return { mode: 'scribble', pts };
+        }
+
+        if (t < holdEnd) {
+          return { mode: 'line', start: first, end: last };
+        }
+
+        return { mode: 'line', start: first, end: last };
+      }
+
+      function drawDemo(now) {
+        if (!state.demoMode || !state.img || state.line || state.previewLine) return;
+        const demo = getDemoLine(now);
+        if (demo.mode === 'scribble') {
+          ctx.save();
+          ctx.scale(state.dpr, state.dpr);
+          ctx.strokeStyle = '#e12a2a';
+          ctx.lineWidth = 3;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          demo.pts.forEach((pt, i) => {
+            const p = localToScreen(pt.x, pt.y);
+            if (i === 0) ctx.moveTo(p.x, p.y);
+            else ctx.lineTo(p.x, p.y);
+          });
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          drawLineLocal({ start: demo.start, end: demo.end }, false);
+        }
+      }
+
+      function draw() {
+        drawGrid();
+        drawImage();
+        drawDemo(performance.now());
+        if (state.line) drawLineLocal(state.line, false);
+        if (state.previewLine) drawLineLocal(state.previewLine, true);
+        updateAngleBox();
+      }
+
+      function pointerToCanvasCss(evt) {
+        const rect = stage.getBoundingClientRect();
+        return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+      }
+
+      function startDraw(evt) {
+        if (!state.img || evt.button !== 0) return;
+        const pos = pointerToCanvasCss(evt);
+        const local = screenToLocal(pos.x, pos.y);
+        if (!isPointOnImage(local)) return;
+        state.demoMode = false;
+        state.drawing = true;
+        state.previewLine = { start: local, end: local };
+        stage.setPointerCapture(evt.pointerId);
+        draw();
+      }
+
+      function moveDraw(evt) {
+        if (!state.drawing || !state.previewLine) return;
+        const pos = pointerToCanvasCss(evt);
+        const local = screenToLocal(pos.x, pos.y);
+        state.previewLine.end = local;
+        draw();
+      }
+
+      function endDraw(evt) {
+        if (!state.drawing || !state.previewLine) return;
+        state.drawing = false;
+        const start = state.previewLine.start;
+        const end = state.previewLine.end;
+        state.previewLine = null;
+        state.line = { start, end };
+        try { stage.releasePointerCapture(evt.pointerId); } catch {}
+        draw();
+      }
+
+      function loadImageFromSrc(src, name = 'image') {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            state.img = img;
+            state.imgName = name;
+            state.rotation = 0;
+            state.line = null;
+            state.previewLine = null;
+            state.demoMode = !name || /demo/i.test(name);
+            state.demoStartedAt = performance.now();
+            setStatus(state.demoMode ? t('statusDemoLoaded', name) : t('statusImageLoaded', name));
+            resizeCanvas();
+            resolve();
+          };
+          img.onerror = reject;
+          img.src = src;
+        });
+      }
+
+      function loadImageFromFile(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => loadImageFromSrc(reader.result, file.name);
+        reader.readAsDataURL(file);
+      }
+
+      async function loadImageFromClipboardButton() {
+        if (!navigator.clipboard || !navigator.clipboard.read) {
+          setStatus(t('statusClipboardUnavailable'));
+          return;
+        }
+        try {
+          const items = await navigator.clipboard.read();
+          for (const item of items) {
+            const type = item.types.find(t => t.startsWith('image/'));
+            if (type) {
+              const blob = await item.getType(type);
+              loadImageFromFile(new File([blob], 'clipboard-image.' + type.split('/')[1], { type }));
+              return;
+            }
+          }
+          setStatus(t('statusClipboardNoImage'));
+        } catch (err) {
+          console.error(err);
+          setStatus(t('statusClipboardFailed'));
+        }
+      }
+
+      function handlePasteEvent(evt) {
+        const items = evt.clipboardData?.items || [];
+        for (const item of items) {
+          if (item.type && item.type.startsWith('image/')) {
+            evt.preventDefault();
+            const file = item.getAsFile();
+            if (file) loadImageFromFile(file);
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function rotateBy(amount) {
+        state.rotation = normalizeAngle(state.rotation + amount);
+        draw();
+      }
+
+      function syncSizeToggles(changed) {
+        if (changed === 'fit') {
+          if (fitScreen.checked) originalSize.checked = false;
+          if (!fitScreen.checked && !originalSize.checked) fitScreen.checked = true;
+        } else {
+          if (originalSize.checked) fitScreen.checked = false;
+          if (!originalSize.checked && !fitScreen.checked) fitScreen.checked = true;
+        }
+        state.originalSize = originalSize.checked;
+        state.fitMode = fitScreen.checked;
+        draw();
+      }
+
+      function initDrop() {
+        let dragCounter = 0;
+        const showDrop = () => dropOverlay.classList.add('visible');
+        const hideDrop = () => dropOverlay.classList.remove('visible');
+
+        ['dragenter', 'dragover'].forEach(type => {
+          window.addEventListener(type, (evt) => {
+            evt.preventDefault();
+            dragCounter++;
+            showDrop();
+          });
+        });
+
+        ['dragleave', 'drop'].forEach(type => {
+          window.addEventListener(type, (evt) => {
+            evt.preventDefault();
+            dragCounter = Math.max(0, dragCounter - 1);
+            if (dragCounter === 0 || type === 'drop') hideDrop();
+          });
+        });
+
+        window.addEventListener('drop', (evt) => {
+          const file = [...(evt.dataTransfer?.files || [])].find(f => f.type.startsWith('image/'));
+          if (file) loadImageFromFile(file);
+        });
+      }
+
+      function initRotatePad() {
+        rotatePad.addEventListener('pointerdown', (evt) => {
+          state.rotateDragging = true;
+          state.rotateStartX = evt.clientX;
+          state.rotateStartAngle = state.rotation;
+          state.tempOpacity = Math.min(state.userOpacity, 0.6);
+          rotatePad.classList.add('active');
+          rotatePad.setPointerCapture(evt.pointerId);
+          draw();
+        });
+        rotatePad.addEventListener('pointermove', (evt) => {
+          if (!state.rotateDragging) return;
+          const delta = evt.clientX - state.rotateStartX;
+          state.rotation = normalizeAngle(state.rotateStartAngle + delta * 0.25);
+          draw();
+        });
+        const end = (evt) => {
+          if (!state.rotateDragging) return;
+          state.rotateDragging = false;
+          state.tempOpacity = null;
+          rotatePad.classList.remove('active');
+          try { rotatePad.releasePointerCapture(evt.pointerId); } catch {}
+          draw();
+        };
+        rotatePad.addEventListener('pointerup', end);
+        rotatePad.addEventListener('pointercancel', end);
+      }
+
+      function tick() {
+        if (state.demoMode && !state.line && !state.previewLine) draw();
+        requestAnimationFrame(tick);
+      }
+
+      fileInput.addEventListener('change', () => loadImageFromFile(fileInput.files?.[0]));
+      pasteBtn.addEventListener('click', loadImageFromClipboardButton);
+      focusPasteBtn.addEventListener('click', () => {
+        pasteDock.focus();
+        setStatus(t('statusPasteFocus'));
+      });
+      clearBtn.addEventListener('click', () => {
+        clearMeasure();
+        setStatus(t('statusCleared', state.imgName));
+      });
+      rotL90.addEventListener('click', () => rotateBy(-90));
+      rotR90.addEventListener('click', () => rotateBy(90));
+      rotL1.addEventListener('click', () => rotateBy(-1));
+      rotR1.addEventListener('click', () => rotateBy(1));
+      rotReset.addEventListener('click', () => { state.rotation = 0; draw(); });
+      fitScreen.addEventListener('change', () => syncSizeToggles('fit'));
+      originalSize.addEventListener('change', () => syncSizeToggles('orig'));
+      dropHint.addEventListener('click', () => setStatus(t('statusDropEnabled'))); 
+
+      stage.addEventListener('pointerdown', startDraw);
+      stage.addEventListener('pointermove', moveDraw);
+      stage.addEventListener('pointerup', endDraw);
+      stage.addEventListener('pointercancel', endDraw);
+
+      window.addEventListener('paste', handlePasteEvent);
+      pasteDock.addEventListener('paste', handlePasteEvent);
+      window.addEventListener('resize', resizeCanvas);
+
+      opacityRange.addEventListener('input', () => {
+        state.userOpacity = Math.max(0.2, Math.min(1, Number(opacityRange.value) / 100));
+        opacityValue.textContent = Math.round(state.userOpacity * 100) + '%';
+        draw();
+      });
+      langEn.addEventListener('click', () => setLanguage('en'));
+      langUk.addEventListener('click', () => setLanguage('uk'));
+      applyLanguage();
+      opacityValue.textContent = Math.round(state.userOpacity * 100) + '%';
+
+      initDrop();
+      initRotatePad();
+      loadImageFromSrc('demo.png', 'demo.png');
+      resizeCanvas();
+      tick();
+    })();
+  </script>
+</body>
+</html>
